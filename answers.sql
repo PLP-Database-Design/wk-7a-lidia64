@@ -1,6 +1,21 @@
--- Question 1: Achieving 1NF
+/* Week 7 Assignment: Database Design and Normalization
+Question 1: Achieving First Normal Form (1NF) */
 
--- Create a temporary table to hold the split products
+/*-- Step 1: Create the original unnormalized ProductDetail table*/
+CREATE TABLE ProductDetail (
+    OrderID INT,
+    CustomerName VARCHAR(100),
+    Products VARCHAR(255)
+);
+
+* Step 2: Insert unnormalized data (comma-separated product list)*/
+INSERT INTO ProductDetail(OrderID, CustomerName, Products)
+VALUES
+(101, 'John Doe', 'Laptop, Mouse'),
+(102, 'Jane Smith', 'Tablet, Keyboard, Mouse'),
+(103, 'Emily Clark', 'Phone');
+
+/* Step 3: Create temporary table to hold the normalized data (split products)*/
 CREATE TEMPORARY TABLE SplitProducts AS
 SELECT
     OrderID,
@@ -8,44 +23,57 @@ SELECT
     TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(Products, ',', n), ',', -1)) AS Product
 FROM
     ProductDetail
-CROSS JOIN
-    (SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) AS numbers -- Adjust the number of unions based on the maximum number of products in a row
-WHERE
-    SUBSTRING_INDEX(SUBSTRING_INDEX(Products, ',', n), ',', -1) <> '';
+JOIN (
+    SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+) numbers ON CHAR_LENGTH(Products)
+    - CHAR_LENGTH(REPLACE(Products, ',', '')) >= n - 1;
 
--- Select the results from the temporary table
-SELECT
-    OrderID,
-    CustomerName,
-    Product
-FROM
-    SplitProducts;
+/* Step 4: View the 1NF-compliant result*/
+SELECT * FROM SplitProducts;
 
--- Optionally, drop the temporary table if you don't need it anymore
--- DROP TEMPORARY TABLE SplitProducts;
 
-/*
-Explanation:
-The Products column contains multiple values, violating 1NF.  This query splits the comma-separated product list into individual rows, ensuring each row has a single product.  A temporary table is used to store the intermediate result. The CROSS JOIN with the numbers table is a common technique to generate the rows needed for splitting.  TRIM removes extra spaces.
-*/
+/* Question 2: Achieving Second Normal Form (2NF)
 
--- Question 2: Achieving 2NF
 
--- Create table Customers
-CREATE TEMPORARY TABLE Customers AS
-SELECT DISTINCT OrderID, CustomerName
-FROM OrderDetails;
+ Step 1: Create the original OrderDetails table (already in 1NF)*/
+CREATE TABLE OrderDetails (
+    OrderID INT,
+    CustomerName VARCHAR(100),
+    Product VARCHAR(100),
+    Quantity INT
+);
 
--- Create table OrderProducts
-CREATE TEMPORARY TABLE OrderProducts AS
-SELECT OrderID, Product, Quantity
-FROM OrderDetails;
+/* Step 2: Insert data into OrderDetails*/
+INSERT INTO OrderDetails (OrderID, CustomerName, Product, Quantity)
+VALUES
+(101, 'John Doe', 'Laptop', 2),
+(101, 'John Doe', 'Mouse', 1),
+(102, 'Jane Smith', 'Tablet', 3),
+(102, 'Jane Smith', 'Keyboard', 1),
+(102, 'Jane Smith', 'Mouse', 2),
+(103, 'Emily Clark', 'Phone', 1);
 
--- Select from Customers and OrderProducts
-SELECT * FROM Customers;
-SELECT * FROM OrderProducts;
+/* Step 3: Create Orders table (to remove partial dependency)*/
+CREATE TABLE Orders (
+    OrderID INT PRIMARY KEY,
+    CustomerName VARCHAR(100)
+);
 
-/*
-Explanation:
-The original OrderDetails table has a partial dependency: CustomerName depends only on OrderID, not on the full primary key (OrderID, Product).  To achieve 2NF, we decompose the table.  The Customers table stores OrderID and CustomerName, eliminating the partial dependency.  The OrderProducts table stores OrderID, Product, and Quantity.
-*/
+INSERT INTO Orders (OrderID, CustomerName)
+SELECT DISTINCT OrderID, CustomerName FROM OrderDetails;
+
+/*Step 4: Create OrderItems table with full functional dependency*/
+CREATE TABLE OrderItems (
+    OrderID INT,
+    Product VARCHAR(100),
+    Quantity INT,
+    PRIMARY KEY (OrderID, Product),
+    FOREIGN KEY (OrderID) REFERENCES Orders(OrderID)
+);
+
+INSERT INTO OrderItems (OrderID, Product, Quantity)
+SELECT OrderID, Product, Quantity FROM OrderDetails;
+
+-- Step 5: View the normalized tables
+SELECT * FROM Orders;
+SELECT * FROM OrderItems;
